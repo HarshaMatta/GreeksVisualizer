@@ -5,8 +5,6 @@ import matplotlib.pyplot as plt
 
 
 # --- Core Mathematical Functions ---
-# ... (all your norm_cdf, norm_pdf, _calculate_d1_d2, etc. functions go here) ...
-# ... (we'll assume they are present) ...
 
 def norm_cdf(x):
     """Cumulative Distribution Function (CDF) for the standard normal distribution."""
@@ -129,59 +127,45 @@ class GreekPlotter:
         self.invert_x = invert_x
 
     def display(self):
-        """
-        Creates and displays the matplotlib plot in Streamlit.
-        """
         fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(self.x_data, self.y_data, label=self.plot_label, color=self.plot_color, linewidth=2.5)
 
-        # Plot the main data
-        ax.plot(self.x_data, self.y_data, label=self.plot_label, color=self.plot_color)
-
-        # Add optional lines
         if self.v_line_1_x is not None:
-            ax.axvline(x=self.v_line_1_x, color='r', linestyle='--', label=self.v_line_1_label)
-
+            ax.axvline(x=self.v_line_1_x, color='gray', linestyle='--', alpha=0.7, label=self.v_line_1_label)
         if self.v_line_2_x is not None:
-            ax.axvline(x=self.v_line_2_x, color='g', linestyle='--', label=self.v_line_2_label)
-
+            ax.axvline(x=self.v_line_2_x, color='gray', linestyle=':', alpha=0.7, label=self.v_line_2_label)
         if self.h_line_1_y is not None:
-            ax.axhline(y=self.h_line_1_y, color='b', linestyle=':', label=self.h_line_1_label)
+            ax.axhline(y=self.h_line_1_y, color='gray', linestyle='-.', alpha=0.7, label=self.h_line_1_label)
 
-        # Set labels and title
-        ax.set_title(self.title)
-        ax.set_xlabel(self.x_label)
-        ax.set_ylabel(self.y_label)
+        ax.set_title(self.title, fontsize=14)
+        ax.set_xlabel(self.x_label, fontsize=12)
+        ax.set_ylabel(self.y_label, fontsize=12)
 
         if self.invert_x:
             ax.invert_xaxis()
 
-        # Add legend only if labels are provided
         if any([self.plot_label, self.v_line_1_label, self.v_line_2_label, self.h_line_1_label]):
-            ax.legend()
+            ax.legend(loc='best')
 
-        ax.grid(True)
-
-        # Display the plot
+        ax.grid(True, alpha=0.3)
         st.pyplot(fig)
 
 
 # --- Streamlit Dashboard ---
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="Option Greeks Visualizer")
 st.title("Interactive Option Greeks Dashboard")
 
-# --- 1. Input Parameters (Sidebar) ---
+# --- Sidebar ---
 st.sidebar.header("Option Parameters")
-
 option_type = st.sidebar.selectbox("Option Type", ('call', 'put'))
-
 S = st.sidebar.slider("Current Stock Price ($)", 50.0, 200.0, 100.0, 0.5)
 K = st.sidebar.slider("Strike Price ($)", 50.0, 200.0, 100.0, 0.5)
 T = st.sidebar.slider("Time to Expiration (Years)", 0.01, 2.0, 1.0, 0.01)
-r = st.sidebar.slider("Risk-Free Interest Rate (%)", 0.0, 10.0, 5.0, 0.1) / 100.0
+r = st.sidebar.slider("Risk-Free Interest Rate (%)", 0.0, 20.0, 5.0, 0.1) / 100.0
 sigma = st.sidebar.slider("Implied Volatility (%)", 1.0, 100.0, 20.0, 0.5) / 100.0
 
-# --- 2. Calculate Greeks and Price ---
+# --- Main Calculations (Single Point) ---
 price = black_scholes_price(S, K, T, r, sigma, option_type)
 delta = calculate_delta(S, K, T, r, sigma, option_type)
 gamma = calculate_gamma(S, K, T, r, sigma)
@@ -189,223 +173,176 @@ vega = calculate_vega(S, K, T, r, sigma)
 theta = calculate_theta(S, K, T, r, sigma, option_type)
 rho = calculate_rho(S, K, T, r, sigma, option_type)
 
-# --- 3. Display Metrics ---
+# --- Metrics Row ---
 st.header(f"{option_type.capitalize()} Option Risk Profile")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Option Price", f"${price:,.2f}")
-col1.metric("Delta", f"{delta:,.4f}")
-col2.metric("Gamma", f"{gamma:,.4f}")
-col2.metric("Vega (per 1% vol)", f"${vega:,.4f}")
-col3.metric("Theta (per day)", f"${theta:,.4f}")
-col3.metric("Rho (per 1% rate)", f"${rho:,.4f}")
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1.metric("Price", f"${price:,.2f}")
+col2.metric("Delta (Δ)", f"{delta:,.3f}")
+col3.metric("Gamma (Γ)", f"{gamma:,.3f}")
+col4.metric("Vega (v)", f"{vega:,.3f}")
+col5.metric("Theta (Θ)", f"{theta:,.3f}")
+col6.metric("Rho (ρ)", f"{rho:,.3f}")
 
 st.markdown("---")
 
-# --- 4. Visualizations (NOW REFACTORED) ---
-st.header("Greek Sensitivity Plots")
-
-# --- Pre-calculate all data for plots vs. Stock Price ---
+# --- Pre-calculate standard S_range data for all tabs ---
 S_range = np.linspace(S * 0.5, S * 1.5, 100)
-deltas = [calculate_delta(s, K, T, r, sigma, option_type) for s in S_range]
-gammas = [calculate_gamma(s, K, T, r, sigma) for s in S_range]
-vegas = [calculate_vega(s, K, T, r, sigma) for s in S_range]
-thetas = [calculate_theta(s, K, T, r, sigma, option_type) for s in S_range]
-prices = [black_scholes_price(s, K, T, r, sigma, option_type) for s in S_range]
+prices_s = [black_scholes_price(s, K, T, r, sigma, option_type) for s in S_range]
+deltas_s = [calculate_delta(s, K, T, r, sigma, option_type) for s in S_range]
+gammas_s = [calculate_gamma(s, K, T, r, sigma) for s in S_range]
+vegas_s = [calculate_vega(s, K, T, r, sigma) for s in S_range]
+thetas_s = [calculate_theta(s, K, T, r, sigma, option_type) for s in S_range]
+rhos_s = [calculate_rho(s, K, T, r, sigma, option_type) for s in S_range]
 
-# --- Create the tabs ---
-tab_price, tab_delta, tab_gamma, tab_vega, tab_theta = st.tabs(
-    ["📈 Price (vs. S)", "Δ Delta", "Γ Gamma", "v Vega", "Θ Theta"]
+# --- TABS ---
+tab_delta, tab_gamma, tab_vega, tab_theta, tab_rho = st.tabs(
+    ["Δ Delta", "Γ Gamma", "v Vega", "Θ Theta", "ρ Rho"]
 )
 
-# --- Plot 1: Price ---
-with tab_price:
-    st.subheader("Price vs. Stock Price")
-
-    # Use the new plotter class
-    price_plot = GreekPlotter(
-        x_data=S_range, y_data=prices,
-        title="Price vs. Stock Price",
-        x_label="Stock Price ($)", y_label="Option Price",
-        plot_label="Price", plot_color='blue',
-        v_line_1_x=S, v_line_1_label=f'Current S (${S:,.2f})',
-        v_line_2_x=K, v_line_2_label=f'Strike K (${K:,.2f})',
-        h_line_1_y=price, h_line_1_label=f'Current Price (${price:,.2f})'
-    )
-    price_plot.display()
-
-# --- Plot 2: Delta ---
+# ======================
+# TAB 1: DELTA (Δ)
+# ======================
 with tab_delta:
-    # --- Title and Info Button ---
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.subheader("Delta vs. Stock Price")
-        st.subheader("What is Delta?")
-        st.write(
-            "Delta (Δ) measures the rate of change of the option price with respect to a $1 change in the underlying stock price.")
-        st.latex(r"\Delta = \frac{\partial C}{\partial S} = N(d_1)")
-    with col2:
-        with st.popover("ℹ️ Show Derivation"):
-            st.subheader("Derivation Steps")
-            st.write("Start with the call price formula:")
-            st.latex(r"C = S N(d_1) - K e^{-rT} N(d_2)")
-            st.write("Apply product and chain rules:")
-            st.latex(
-                r"\Delta = N(d_1) + S n(d_1) \frac{\partial d_1}{\partial S} - K e^{-rT} n(d_2) \frac{\partial d_2}{\partial S}")
-            st.write(
-                r"Find helpers: $\frac{\partial d_1}{\partial S} = \frac{\partial d_2}{\partial S} = \frac{1}{S \sigma \sqrt{T}}$")
-            st.write("Substitute and simplify using the identity $S n(d_1) = K e^{-rT} n(d_2)$:")
-            st.latex(r"\Delta = N(d_1) + \frac{n(d_1)}{\sigma \sqrt{T}} - \frac{S n(d_1)}{S \sigma \sqrt{T}}")
-            st.write("Final result:")
-            st.latex(r"\Delta = N(d_1)")
+    col_head, col_info = st.columns([0.8, 0.2])
+    with col_head:
+        st.subheader("Delta (Δ): Sensitivity to Stock Price")
+    with col_info:
+        with st.popover("ℹ️ Derivation"):
+            st.latex(r"\Delta = \frac{\partial C}{\partial S} = N(d_1)")
+            st.write("Delta is the first derivative of Price with respect to Stock Price.")
 
-    # Use the new plotter class
-    delta_plot = GreekPlotter(
-        x_data=S_range, y_data=deltas,
-        title="",  # Title is handled by st.subheader
-        x_label="Stock Price ($)", y_label="Delta",
-        plot_label="Delta", plot_color='orange',
-        v_line_1_x=S, v_line_1_label=f'Current S (${S:,.2f})',
-        v_line_2_x=K, v_line_2_label=f'Strike K (${K:,.2f})'
-    )
-    delta_plot.display()
+    # --- Graph 1: The Derivative (Slope) ---
+    st.info("Graph 1: Delta is the **slope** of this curve (Price vs Stock Price).", icon="📈")
+    GreekPlotter(S_range, prices_s, "Option Price vs. Stock Price", "Stock Price ($)", "Option Price ($)",
+                 "Price", "blue", v_line_1_x=S, v_line_1_label="Current S").display()
 
-# --- Plot 3: Gamma ---
+    # --- Graph 2: The Value (Height) ---
+    st.info("Graph 2: This shows the actual **value** of Delta at different stock prices.", icon="📏")
+    GreekPlotter(S_range, deltas_s, "Delta vs. Stock Price", "Stock Price ($)", "Delta",
+                 "Delta", "orange", v_line_1_x=S, v_line_1_label="Current S", v_line_2_x=K,
+                 v_line_2_label="Strike K").display()
+
+# ======================
+# TAB 2: GAMMA (Γ)
+# ======================
 with tab_gamma:
-    # --- Title and Info Button ---
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.subheader("Gamma vs. Stock Price")
-        st.subheader("What is Gamma?")
-        st.write(
-            "Gamma (Γ) measures the rate of change of Delta. It's the *second* partial derivative of the option price.")
-        st.latex(r"\Gamma = \frac{\partial^2 C}{\partial S^2} = \frac{n(d_1)}{S \sigma \sqrt{T}}")
-    with col2:
-        with st.popover("ℹ️ Show Derivation"):
-            st.subheader("Derivation Steps")
-            st.write(r"Start with Delta: $\Delta = N(d_1)$")
-            st.write(
-                r"Differentiate with respect to S: $\Gamma = \frac{\partial \Delta}{\partial S} = n(d_1) \cdot \frac{\partial d_1}{\partial S}$")
-            st.write(r"Substitute helper $\frac{\partial d_1}{\partial S} = \frac{1}{S \sigma \sqrt{T}}$:")
-            st.latex(r"\Gamma = n(d_1) \left( \frac{1}{S \sigma \sqrt{T}} \right) = \frac{n(d_1)}{S \sigma \sqrt{T}}")
+    col_head, col_info = st.columns([0.8, 0.2])
+    with col_head:
+        st.subheader("Gamma (Γ): Sensitivity of Delta")
+    with col_info:
+        with st.popover("ℹ️ Derivation"):
+            st.latex(
+                r"\Gamma = \frac{\partial^2 C}{\partial S^2} = \frac{\partial \Delta}{\partial S} = \frac{n(d_1)}{S \sigma \sqrt{T}}")
+            st.write("Gamma is the derivative of Delta with respect to Stock Price.")
 
-    # Use the new plotter class
-    gamma_plot = GreekPlotter(
-        x_data=S_range, y_data=gammas,
-        title="",  # Title is handled by st.subheader
-        x_label="Stock Price ($)", y_label="Gamma",
-        plot_label="Gamma", plot_color='green',
-        v_line_1_x=S, v_line_1_label=f'Current S (${S:,.2f})',
-        v_line_2_x=K, v_line_2_label=f'Strike K (${K:,.2f})'
-    )
-    gamma_plot.display()
+    # --- Graph 1: The Derivative (Slope) ---
+    st.info("Graph 1: Gamma is the **slope** of this curve (Delta vs Stock Price).", icon="📈")
+    GreekPlotter(S_range, deltas_s, "Delta vs. Stock Price", "Stock Price ($)", "Delta",
+                 "Delta", "orange", v_line_1_x=S, v_line_1_label="Current S").display()
 
-# --- Plot 4: Vega ---
+    # --- Graph 2: The Value (Height) ---
+    st.info("Graph 2: This shows the actual **value** of Gamma. Notice it peaks AT-The-Money.", icon="📏")
+    GreekPlotter(S_range, gammas_s, "Gamma vs. Stock Price", "Stock Price ($)", "Gamma",
+                 "Gamma", "green", v_line_1_x=S, v_line_1_label="Current S", v_line_2_x=K,
+                 v_line_2_label="Strike K").display()
+
+# ======================
+# TAB 3: VEGA (v)
+# ======================
 with tab_vega:
-    # --- Title and Info Button ---
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.subheader("Vega vs. Stock Price")
-        st.subheader("What is Vega?")
-        st.write("Vega (v) measures the option's sensitivity to a 1% change in implied volatility (σ).")
-        st.latex(r"v = \frac{\partial C}{\partial \sigma} = S n(d_1) \sqrt{T}")
-    with col2:
-        with st.popover("ℹ️ Show Derivation"):
-            st.subheader("Derivation Steps")
-            st.latex(
-                r"v = S n(d_1) \frac{\partial d_1}{\partial \sigma} - K e^{-rT} n(d_2) \frac{\partial d_2}{\partial \sigma}")
-            st.write(r"Use identity $K e^{-rT} n(d_2) = S n(d_1)$ and factor:")
-            st.latex(
-                r"v = S n(d_1) \left[ \frac{\partial d_1}{\partial \sigma} - \frac{\partial d_2}{\partial \sigma} \right]")
-            st.write(
-                r"Use helper difference $\frac{\partial d_1}{\partial \sigma} - \frac{\partial d_2}{\partial \sigma} = \sqrt{T}$:")
-            st.latex(r"v = S n(d_1) \sqrt{T}")
+    col_head, col_info = st.columns([0.8, 0.2])
+    with col_head:
+        st.subheader("Vega (v): Sensitivity to Volatility")
+    with col_info:
+        with st.popover("ℹ️ Derivation"):
+            st.latex(r"v = \frac{\partial C}{\partial \sigma} = S n(d_1) \sqrt{T}")
+            st.write("Vega is the derivative of Price with respect to Volatility ($\sigma$).")
 
-    # Use the new plotter class
-    vega_plot = GreekPlotter(
-        x_data=S_range, y_data=vegas,
-        title="",  # Title is handled by st.subheader
-        x_label="Stock Price ($)", y_label="Vega",
-        plot_label="Vega", plot_color='red',
-        v_line_1_x=S, v_line_1_label=f'Current S (${S:,.2f})',
-        v_line_2_x=K, v_line_2_label=f'Strike K (${K:,.2f})'
-    )
-    vega_plot.display()
+    # Data for Volatility plots
+    vol_range = np.linspace(0.01, 1.0, 100)
+    prices_v = [black_scholes_price(S, K, T, r, v, option_type) for v in vol_range]
+    vegas_v = [calculate_vega(S, K, T, r, v) for v in vol_range]
 
-# --- Plot 5: Theta ---
+    # --- Graph 1: The Derivative (Slope) ---
+    st.info("Graph 1: Vega is the **slope** of this curve (Price vs Volatility).", icon="📈")
+    GreekPlotter(vol_range, prices_v, "Option Price vs. Implied Volatility", "Volatility ($\sigma$)",
+                 "Option Price ($)",
+                 "Price", "blue", v_line_1_x=sigma, v_line_1_label=f"Current Vol ({sigma:.0%})").display()
+
+    # --- Graph 2: The Value (Height) ---
+    st.info("Graph 2: This shows how Vega itself changes as volatility changes.", icon="📏")
+    GreekPlotter(vol_range, vegas_v, "Vega vs. Implied Volatility", "Volatility ($\sigma$)", "Vega",
+                 "Vega", "red", v_line_1_x=sigma, v_line_1_label=f"Current Vol ({sigma:.0%})").display()
+
+    # --- Graph 3: Standard View ---
+    st.info("Graph 3 (Standard View): Vega at different stock prices.", icon="📊")
+    GreekPlotter(S_range, vegas_s, "Vega vs. Stock Price", "Stock Price ($)", "Vega",
+                 "Vega", "red", v_line_1_x=S, v_line_1_label="Current S", v_line_2_x=K,
+                 v_line_2_label="Strike K").display()
+
+# ======================
+# TAB 4: THETA (Θ)
+# ======================
 with tab_theta:
-    # --- Main Title and Info ---
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.subheader("Visualizing Theta (Θ)")
-        st.write("Theta (Θ), or 'time decay', measures the option's sensitivity to the passage of time.")
-    with col2:
-        with st.popover("ℹ️ Show Derivation"):
-            st.subheader("Derivation Steps (Call)")
+    col_head, col_info = st.columns([0.8, 0.2])
+    with col_head:
+        st.subheader("Theta (Θ): Time Decay")
+    with col_info:
+        with st.popover("ℹ️ Derivation"):
             st.latex(r"\Theta = -\frac{\partial C}{\partial T}")
-            st.latex(
-                r"\frac{\partial C}{\partial T} = S n(d_1) \left[ \frac{\sigma}{2\sqrt{T}} \right] + r K e^{-rT} N(d_2)")
-            st.write("Flip the sign for Theta:")
-            st.latex(r"\Theta = -\frac{S n(d_1) \sigma}{2\sqrt{T}} - r K e^{-rT} N(d_2)")
+            st.write("Theta is the *negative* derivative of Price with respect to Time ($T$).")
 
-    st.markdown("---")
+    # Data for Time plots
+    T_range_plot = np.linspace(2.0, 0.01, 100)
+    prices_t = [black_scholes_price(S, K, t, r, sigma, option_type) for t in T_range_plot]
+    thetas_t = [calculate_theta(S, K, t, r, sigma, option_type) for t in T_range_plot]
 
-    # --- Nested Tabs ---
+    # --- Graph 1: The Derivative (Slope) ---
+    st.info("Graph 1: Theta is the **negative slope** of this curve. A steep drop means high time decay.", icon="📈")
+    GreekPlotter(T_range_plot, prices_t, "Option Price vs. Time to Expiration", "Time to Expiration (Years)",
+                 "Option Price ($)",
+                 "Price Decay", "cyan", v_line_1_x=T, v_line_1_label=f"Current T ({T:.1f}y)", invert_x=True).display()
 
-    st.info("This plot shows the option's Price vs. Time. **Theta is the *negative* of this curve's slope.**",
-            icon="🧠")
+    # --- Graph 2: The Value (Height) ---
+    st.info("Graph 2: This shows how Theta itself speeds up as expiration approaches.", icon="📏")
+    GreekPlotter(T_range_plot, thetas_t, "Theta vs. Time to Expiration", "Time to Expiration (Years)", "Theta (Daily)",
+                 "Theta", "purple", v_line_1_x=T, v_line_1_label=f"Current T ({T:.1f}y)", invert_x=True).display()
 
-    # --- Data Calculation for this Plot ---
-    T_range = np.linspace(2.0, 0.01, 100)
-    prices_over_time = [
-        black_scholes_price(S, K, t_val, r, sigma, option_type) for t_val in T_range
-    ]
+    # --- Graph 3: Standard View ---
+    st.info("Graph 3 (Standard View): Theta at different stock prices.", icon="📊")
+    GreekPlotter(S_range, thetas_s, "Theta vs. Stock Price", "Stock Price ($)", "Theta (Daily)",
+                 "Theta", "purple", v_line_1_x=S, v_line_1_label="Current S", v_line_2_x=K,
+                 v_line_2_label="Strike K").display()
 
-    # Use the new plotter class
-    theta_t_plot = GreekPlotter(
-        x_data=T_range, y_data=prices_over_time,
-        title="Option Price vs. Time to Expiration",
-        x_label="Time to Expiration (Years)", y_label="Option Price ($)",
-        plot_label="Price Decay Path", plot_color='cyan',
-        v_line_1_x=T, v_line_1_label=f'Current T ({T:,.2f} yrs)',
-        h_line_1_y=price, h_line_1_label=f'Current Price (${price:,.2f})',
-        invert_x=True  # Invert the x-axis
-    )
-    theta_t_plot.display()
+# ======================
+# TAB 5: RHO (ρ)
+# ======================
+with tab_rho:
+    col_head, col_info = st.columns([0.8, 0.2])
+    with col_head:
+        st.subheader("Rho (ρ): Sensitivity to Interest Rates")
+    with col_info:
+        with st.popover("ℹ️ Derivation"):
+            st.latex(r"\rho = \frac{\partial C}{\partial r}")
+            st.write("Rho is the derivative of Price with respect to the Risk-Free Rate ($r$).")
 
-    st.info("This plot shows how Theta's value changes as the option approaches expiration.", icon="🧠")
+    # Data for Interest Rate plots
+    r_range = np.linspace(0.0, 0.20, 100)  # 0% to 20% rates
+    prices_r = [black_scholes_price(S, K, T, rate, sigma, option_type) for rate in r_range]
+    rhos_r = [calculate_rho(S, K, T, rate, sigma, option_type) for rate in r_range]
 
-    # --- 1. Calculate NEW data for this plot ---
-    # Create an X-axis of Time values
-    T_range = np.linspace(2.0, 0.01, 100)
-    # Create a Y-axis of Theta values by looping over T_range
-    thetas_over_time = [
-        calculate_theta(S, K, t_val, r, sigma, option_type) for t_val in T_range
-    ]
+    # --- Graph 1: The Derivative (Slope) ---
+    st.info("Graph 1: Rho is the **slope** of this curve (Price vs Interest Rate).", icon="📈")
+    GreekPlotter(r_range, prices_r, "Option Price vs. Risk-Free Rate", "Risk-Free Rate ($r$)", "Option Price ($)",
+                 "Price", "blue", v_line_1_x=r, v_line_1_label=f"Current Rate ({r:.0%})").display()
 
-    # --- 2. Use the class with the new data ---
-    theta_vs_time_plot = GreekPlotter(
-        x_data=T_range, y_data=thetas_over_time,  # DATA is (Time, Theta)
-        title="Theta vs. Time to Expiration",
-        x_label="Time to Expiration (Years)",  # LABEL matches data
-        y_label="Theta (per day)",
-        plot_label="Theta", plot_color='purple',
-        v_line_1_x=T, v_line_1_label=f'Current T ({T:,.2f} yrs)',  # V-LINE matches data
-        invert_x=True  # This matches your other time plot
-    )
-    theta_vs_time_plot.display()
+    # --- Graph 2: The Value (Height) ---
+    st.info("Graph 2: This shows how Rho changes as interest rates change.", icon="📏")
+    GreekPlotter(r_range, rhos_r, "Rho vs. Risk-Free Rate", "Risk-Free Rate ($r$)", "Rho",
+                 "Rho", "magenta", v_line_1_x=r, v_line_1_label=f"Current Rate ({r:.0%})").display()
 
-
-    st.info("This plot shows the *value* of Theta (per day) at different stock prices.", icon="⚠️")
-
-    # Use the new plotter class
-    theta_s_plot = GreekPlotter(
-        x_data=S_range, y_data=thetas,
-        title="Theta vs. Stock Price",
-        x_label="Stock Price ($)", y_label="Theta (per day)",
-        plot_label="Theta", plot_color='purple',
-        v_line_1_x=S, v_line_1_label=f'Current S (${S:,.2f})',
-        v_line_2_x=K, v_line_2_label=f'Strike K (${K:,.2f})'
-    )
-    theta_s_plot.display()
-
+    # --- Graph 3: Standard View ---
+    st.info("Graph 3 (Standard View): Rho at different stock prices.", icon="📊")
+    GreekPlotter(S_range, rhos_s, "Rho vs. Stock Price", "Stock Price ($)", "Rho",
+                 "Rho", "magenta", v_line_1_x=S, v_line_1_label="Current S", v_line_2_x=K,
+                 v_line_2_label="Strike K").display()
